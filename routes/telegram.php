@@ -2,6 +2,8 @@
 
 /** @var Nutgram $bot */
 
+use App\Jobs\ProcessVideoDownload;
+use App\Models\Download;
 use App\Models\TelegramUser;
 use App\Telegram\Middleware\UserRegistrationAndQuota;
 use SergiX44\Nutgram\Nutgram;
@@ -45,3 +47,26 @@ $bot->onCommand('start', function (Nutgram $bot): void {
         parse_mode: 'Markdown',
     );
 })->description('Start the bot');
+
+// ---------------------------------------------------------------------------
+// YouTube URL Handler
+// ---------------------------------------------------------------------------
+$bot->onText('(?i).*(youtube\.com|youtu\.be).*', function (Nutgram $bot): void {
+    /** @var TelegramUser $user */
+    $user = $bot->get('user');
+
+    $url = $bot->message()->text;
+
+    $download = Download::create([
+        'telegram_user_id' => $user->id,
+        'video_url' => $url,
+        'status' => 'pending',
+    ]);
+
+    ProcessVideoDownload::dispatch($download, $user);
+
+    $bot->sendMessage(
+        text: '⏳ تمت إضافة الفيديو لطابور التحميل. سيتم إرساله لك فور الانتهاء...',
+        chat_id: $user->telegram_id
+    );
+});
