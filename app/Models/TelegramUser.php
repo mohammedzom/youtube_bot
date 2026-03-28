@@ -44,4 +44,19 @@ class TelegramUser extends Model
     {
         return $this->hasMany(Download::class);
     }
+
+    /**
+     * Determine whether this user may request another download.
+     *
+     * A user has available quota when any of the following is true:
+     *  - They have not yet hit their daily free limit (used_today < daily_limit)
+     *  - They have premium credits remaining (premium_credits > 0)
+     *  - They are a VIP user with unlimited access (is_vip == true)
+     */
+    public function hasAvailableQuota(): bool
+    {
+        return $this->is_vip
+            || $this->premium_credits > 0
+            || $this->used_today < $this->daily_limit;
+    }
 }
