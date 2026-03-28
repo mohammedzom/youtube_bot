@@ -3,7 +3,7 @@
 /** @var Nutgram $bot */
 
 use App\Models\TelegramUser;
-use App\Telegram\Middleware\UserRegistrationMiddleware;
+use App\Telegram\Middleware\UserRegistrationAndQuota;
 use SergiX44\Nutgram\Nutgram;
 
 /*
@@ -11,46 +11,37 @@ use SergiX44\Nutgram\Nutgram;
 | Nutgram Handlers
 |--------------------------------------------------------------------------
 |
-| Here is where you register telegram handlers for Nutgram. These handlers
-| are loaded by the NutgramServiceProvider. The UserRegistrationMiddleware
-| runs on every update and ensures the user exists in the database, resets
-| daily counters when the day rolls over, and shares the TelegramUser model
-| on the bot instance via $bot->get('user').
+| The UserRegistrationAndQuota middleware runs globally on every incoming
+| update. It finds or creates the TelegramUser, resets the daily counter
+| when the day changes, and halts the chain with an Arabic quota-exceeded
+| message when the user has no available downloads remaining.
 |
 */
 
-// Run on every incoming update.
-$bot->middleware(UserRegistrationMiddleware::class);
+$bot->middleware(UserRegistrationAndQuota::class);
 
-// /start command — greets the user and shows their current quota status.
+// ---------------------------------------------------------------------------
+// /start — welcome message with Telegram ID and remaining daily quota
+// ---------------------------------------------------------------------------
 $bot->onCommand('start', function (Nutgram $bot): void {
     /** @var TelegramUser $user */
     $user = $bot->get('user');
 
-    $name = $bot->user()->first_name ?? 'there';
-
-    if (! $user->hasAvailableQuota()) {
-        $bot->sendMessage(
-            text: "👋 Hi, {$name}!\n\n"
-                ."⚠️ You've used all your downloads for today.\n"
-                .'Your daily limit resets at midnight. Come back tomorrow!',
-        );
-
-        return;
-    }
-
     $remaining = $user->daily_limit - $user->used_today;
+
     $creditsLine = $user->premium_credits > 0
-        ? "\n💎 Premium credits: *{$user->premium_credits}*"
+        ? "\n💎 رصيد premium: *{$user->premium_credits}* تنزيل"
         : '';
 
     $vipBadge = $user->is_vip ? ' 👑' : '';
 
     $bot->sendMessage(
-        text: "👋 Welcome{$vipBadge}, *{$name}*!\n\n"
-            ."Send me any YouTube link and I'll download it for you.\n\n"
-            ."📊 *Your quota today:* {$user->used_today} / {$user->daily_limit} used"
-            ." ({$remaining} remaining){$creditsLine}",
+        text: "👋 أهلاً بك{$vipBadge}!\n\n"
+            ."🆔 معرّفك: `{$user->telegram_id}`\n"
+            ."📊 حصتك اليوم: *{$user->used_today}* / *{$user->daily_limit}* مستخدم"
+            ." _(متبقي: {$remaining})_"
+            ."{$creditsLine}\n\n"
+            .'أرسل لي أي رابط YouTube وسأقوم بتحميله لك. 🎬',
         parse_mode: 'Markdown',
     );
-})->description('Start the bot and check your download quota');
+})->description('Start the bot');
