@@ -18,7 +18,7 @@ class YoutubeDownloaderService
     /**
      * Absolute path to the yt-dlp binary.
      */
-    private const YTDLP_BIN = '/usr/local/bin/yt-dlp';
+    private const YTDLP_BIN = '/home/ubuntu/.local/bin/yt-dlp';
 
     /**
      * Maximum seconds to wait for a download to complete.
@@ -45,6 +45,10 @@ class YoutubeDownloaderService
 
         $result = Process::timeout(self::DOWNLOAD_TIMEOUT)->run([
             self::YTDLP_BIN,
+            '--js-runtimes', 'node',
+            '--remote-components', 'ejs:github',
+            '--cookies', storage_path('app/youtube_cookies.txt'),
+            '--extractor-args', 'youtube:player_client=android,web',
             '--source-address', $sourceAddress,
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', $outputPath,
@@ -71,7 +75,7 @@ class YoutubeDownloaderService
     private function generateRandomIpv6(): string
     {
         $blocks = array_map(
-            fn (): string => str_pad(dechex(random_int(0, 0xffff)), 4, '0', STR_PAD_LEFT),
+            fn (): string => str_pad(dechex(random_int(0, 0xFFFF)), 4, '0', STR_PAD_LEFT),
             array_fill(0, 4, null)
         );
 
