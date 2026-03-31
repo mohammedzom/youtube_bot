@@ -8,8 +8,8 @@ use App\Services\YoutubeDownloaderService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
 use SergiX44\Nutgram\Nutgram;
+use SergiX44\Nutgram\Telegram\Types\Internal\InputFile;
 use Throwable;
 
 class ProcessVideoDownload implements ShouldQueue
@@ -43,7 +43,7 @@ class ProcessVideoDownload implements ShouldQueue
 
             $bot->sendVideo(
                 chat_id: $this->user->telegram_id,
-                video: Storage::disk('local')->readStream(str_replace(storage_path('app/'), '', $filePath)),
+                video: InputFile::make($filePath),
                 caption: '✅ تم التحميل بنجاح!'
             );
 
