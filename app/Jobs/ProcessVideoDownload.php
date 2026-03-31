@@ -21,7 +21,8 @@ class ProcessVideoDownload implements ShouldQueue
      */
     public function __construct(
         public Download $download,
-        public TelegramUser $user
+        public TelegramUser $user,
+        public string $quality = 'best'
     ) {}
 
     /**
@@ -34,18 +35,26 @@ class ProcessVideoDownload implements ShouldQueue
         try {
             $this->download->update(['status' => 'downloading']);
 
-            $filePath = $downloader->downloadVideo($this->download->video_url);
+            $filePath = $downloader->downloadVideo($this->download->video_url, $this->quality);
 
             $this->download->update([
                 'status' => 'uploading',
                 'file_path' => $filePath,
             ]);
 
-            $bot->sendVideo(
-                chat_id: $this->user->telegram_id,
-                video: InputFile::make($filePath),
-                caption: '✅ تم التحميل بنجاح!'
-            );
+            if ($this->quality === 'audio') {
+                $bot->sendAudio(
+                    chat_id: $this->user->telegram_id,
+                    audio: InputFile::make($filePath),
+                    caption: '✅ تم تحميل الصوت بنجاح!'
+                );
+            } else {
+                $bot->sendVideo(
+                    chat_id: $this->user->telegram_id,
+                    video: InputFile::make($filePath),
+                    caption: '✅ تم التحميل بنجاح!'
+                );
+            }
 
             if (File::exists($filePath)) {
                 File::delete($filePath);

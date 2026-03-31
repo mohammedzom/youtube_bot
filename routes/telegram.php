@@ -52,7 +52,7 @@ $bot->onCommand('start', function (Nutgram $bot): void {
 })->description('Start the bot');
 
 // ---------------------------------------------------------------------------
-// YouTube URL Handler
+// YouTube URL Handler — show metadata + download buttons ONLY, no job dispatch
 // ---------------------------------------------------------------------------
 $bot->onText('(?i).*(youtube\.com|youtu\.be).*', function (Nutgram $bot): void {
     /** @var TelegramUser $user */
@@ -60,45 +60,69 @@ $bot->onText('(?i).*(youtube\.com|youtu\.be).*', function (Nutgram $bot): void {
 
     $url = $bot->message()->text;
 
+    /** @var YoutubeMetadataService $metadata */
     $metadata = app(YoutubeMetadataService::class);
 
-    // ------------------------------------------------------------------
-    // Fetch and display video metadata immediately for instant UX
-    // ------------------------------------------------------------------
     $info = $metadata->fetchMetadata($url);
 
+    if ($info === null) {
+        $bot->sendMessage(
+            text: '⚠️ لم أتمكن من جلب معلومات الفيديو. تأكد من صحة الرابط.',
+            chat_id: $user->telegram_id,
+        );
+
+        return;
+    }
+
+    $videoId = $metadata->extractVideoId($url);
+
+    $caption = "🎬 *{$info['title']}*\n\n"
+        ."📺 القناة: {$info['channelTitle']}\n"
+        ."⏱ المدة: {$info['duration']}\n\n"
+        .'اختر جودة التحميل:';
+
+    $keyboard = InlineKeyboardMarkup::make()
+        ->addRow(
+            InlineKeyboardButton::make('🎵 MP3 / صوت', callback_data: "dl:audio:{$videoId}"),
+            InlineKeyboardButton::make('📹 720p', callback_data: "dl:720:{$videoId}"),
+            InlineKeyboardButton::make('📹 أفضل جودة', callback_data: "dl:best:{$videoId}"),
+        );
+
+    $bot->sendPhoto(
+        photo: $info['thumbnail_url'],
+        caption: $caption,
+        parse_mode: 'Markdown',
+        reply_markup: $keyboard,
+        chat_id: $user->telegram_id,
+    );
+});
+
+// ---------------------------------------------------------------------------
+// Callback Query Handler — activated when the user taps a download button
+// ---------------------------------------------------------------------------
+$bot->onCallbackQueryData('dl:{quality}:{vid}', function (Nutgram $bot, string $quality, string $vid): void {
+    /** @var TelegramUser $user */
+    $user = $bot->get('user');
+
+    // Acknowledge the button tap immediately so Telegram removes the loading state
+    $bot->answerCallbackQuery(text: '⏳ تمت الإضافة للطابور...');
+
+    // Edit the caption in-place to show a queued status (keeps the photo)
+    $bot->editMessageCaption(
+        caption: '⏳ *جاري التحميل...*'."\n\nسيتم إرسال الملف لك فور الانتهاء.",
+        parse_mode: 'Markdown',
+    );
+
+    // Reconstruct the full YouTube URL from the video ID
+    $videoUrl = "https://www.youtube.com/watch?v={$vid}";
+
+    // Create the download record and dispatch the background job
     $download = Download::create([
         'telegram_user_id' => $user->id,
-        'video_url' => $url,
+        'video_url' => $videoUrl,
+        'quality' => $quality,
         'status' => 'pending',
     ]);
 
-    ProcessVideoDownload::dispatch($download, $user);
-
-    if ($info !== null) {
-        $caption = "🎬 *{$info['title']}*\n\n"
-            ."📺 القناة: {$info['channelTitle']}\n"
-            ."⏱ المدة: {$info['duration']}\n\n"
-            .'⏳ جاري التحميل، سيتم إرسال الملف فور الانتهاء...';
-
-        $keyboard = InlineKeyboardMarkup::make()
-            ->addRow(
-                InlineKeyboardButton::make('🎵 MP3', callback_data: "dl:mp3:{$download->id}"),
-                InlineKeyboardButton::make('📹 720p', callback_data: "dl:720p:{$download->id}"),
-                InlineKeyboardButton::make('📹 Best', callback_data: "dl:best:{$download->id}"),
-            );
-
-        $bot->sendPhoto(
-            photo: $info['thumbnail_url'],
-            caption: $caption,
-            parse_mode: 'Markdown',
-            reply_markup: $keyboard,
-            chat_id: $user->telegram_id,
-        );
-    } else {
-        $bot->sendMessage(
-            text: '⏳ تمت إضافة الفيديو لطابور التحميل. سيتم إرساله لك فور الانتهاء...',
-            chat_id: $user->telegram_id,
-        );
-    }
+    ProcessVideoDownload::dispatch($download, $user, $quality);
 });
