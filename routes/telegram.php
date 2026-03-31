@@ -54,11 +54,13 @@ $bot->onCommand('start', function (Nutgram $bot): void {
 // ---------------------------------------------------------------------------
 // YouTube URL Handler
 // ---------------------------------------------------------------------------
-$bot->onText('(?i).*(youtube\.com|youtu\.be).*', function (Nutgram $bot, YoutubeMetadataService $metadata): void {
+$bot->onText('(?i).*(youtube\.com|youtu\.be).*', function (Nutgram $bot): void {
     /** @var TelegramUser $user */
     $user = $bot->get('user');
 
     $url = $bot->message()->text;
+
+    $metadata = app(YoutubeMetadataService::class);
 
     // ------------------------------------------------------------------
     // Fetch and display video metadata immediately for instant UX
